@@ -288,7 +288,8 @@ class PythonController:
             refined_content = []
             for row in csv_rows:
                 if not row.startswith("\t"):
-                    refined_content.append(row)
+                    if not row.startswith("table") and not row.startswith(")"):
+                        refined_content.append(row.split(",")[0])
                     continue
             ddl_table[ddl_file_path] = refined_content
         return ddl_table

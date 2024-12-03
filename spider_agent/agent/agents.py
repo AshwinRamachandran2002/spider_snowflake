@@ -236,6 +236,9 @@ class PromptAgent:
                 elif refresh == "Go back to System Message":
                     self.history_messages = [self.history_messages[0]]
                     # self.model = "o1-preview"
+                elif refresh == "Go back to DDL justification":
+                    self.history_messages = [self.history_messages[:-4]]
+                    obs = "You are in the folder now."
 
             if done:
                 if isinstance(action, Terminate):

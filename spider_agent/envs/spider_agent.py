@@ -297,6 +297,17 @@ class Spider_Agent_Env(gym.Env):
                     return observation
 
 
+                def ddl_file_prompt():
+                    observation = "\n\nFollowing is the DDL file\n\n"
+                    observation += self.controller.execute_sf_inspect_ddl(self.ddl_files[0]) + "\n\n"
+                    observation += "\n\nWhat tables do you think are relevant to the task?\n\n"
+                    observation += "\n\nUsing SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE write down all JSON files, description of the JSON files and why it is or is not relevant for the task.\n\n"
+                    observation += "\nThe justification must be why it is or why it is not relevant for the current task: " + self.instruction + "\n\n"
+                    observation += "\nFunction Signature: \n" + SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE.get_action_description() + "\n"
+                    observation += "\n\nTable JSON files are: " + ", ".join(self.json_files) + "\n\n"
+                    observation += "\n\nJustificaion must be made for all JSON files\n\n"
+                    observation += "\n\nTask is: " + self.instruction + "\n\n"
+                    return observation
 
                 if isinstance(action, PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS):
                     observation = self.controller.execute_PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS(action)
@@ -307,15 +318,7 @@ class Spider_Agent_Env(gym.Env):
                         observation += "\n\nWhat information do you think is relevant to the task?\n\n"
 
                     if len(self.ddl_files) == 1:
-                        observation += "\n\nFollowing is the DDL file\n\n"
-                        observation += self.controller.execute_sf_inspect_ddl(self.ddl_files[0]) + "\n\n"
-                        observation += "\n\nWhat tables do you think are relevant to the task?\n\n"
-                        observation += "\n\nUsing SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE write down all JSON files, description of the JSON files and why it is or is not relevant for the task.\n\n"
-                        observation += "\nThe justification must be why it is or why it is not relevant for the current task: " + self.instruction + "\n\n"
-                        observation += "\nFunction Signature: \n" + SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE.get_action_description() + "\n"
-                        observation += "\n\nTable JSON files are: " + ", ".join(self.json_files) + "\n\n"
-                        observation += "\n\nJustificaion must be made for all JSON files\n\n"
-                        observation += "\n\nTask is: " + self.instruction + "\n\n"
+                        observation += ddl_file_prompt()
                     else:
                         table_per_ddl = self.controller.execute_sf_info_ddl(self.ddl_files)
                         observation += "\n\nDDL files are: \n"
@@ -336,19 +339,7 @@ class Spider_Agent_Env(gym.Env):
                     for desc in ddl_desc:
                         if desc["is_relevant"]:
                             self.ddl_files.append(desc["ddl_path"])
-                    
-                    assert len(self.ddl_files) == 1, "Only one DDL file can be relevant"
-
-                    observation += "\n\nFollowing is the DDL file\n\n"
-                    observation += self.controller.execute_sf_inspect_ddl(self.ddl_files[0]) + "\n\n"
-                    observation += "\n\nWhat tables do you think are relevant to the task?\n\n"
-                    observation += "\n\nUsing SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE write down all JSON files, description of the JSON files and why it is or is not relevant for the task.\n\n"
-                    observation += "\nThe justification must be why it is or why it is not relevant for the current task: " + self.instruction + "\n\n"
-                    observation += "\nFunction Signature: \n" + SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE.get_action_description() + "\n"
-                    observation += "\n\nTable JSON files are: " + ", ".join(self.json_files) + "\n\n"
-                    observation += "\n\nJustificaion must be made for all JSON files\n\n"
-                    observation += "\n\nTask is: " + self.instruction + "\n\n"
-                    
+                    observation = ddl_file_prompt()
 
                 elif isinstance(action, SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE):
                     json_desc = action.json_reason
@@ -357,8 +348,6 @@ class Spider_Agent_Env(gym.Env):
                         self.json_files.append(desc["json_path"])
                         
                     observation = read_json_prompt()
-
-
 
 
                 elif isinstance(action, SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE):
@@ -404,6 +393,10 @@ class Spider_Agent_Env(gym.Env):
                     if len(self.json_files):
                         observation = read_json_prompt()
                         refresh = "Go back to JSON justification"
+                    elif len(self.ddl_files) > 1:
+                        self.ddl_files = self.ddl_files[1:]
+                        observation = ddl_file_prompt()
+                        refresh = "Go back to DDL justification"
                     else:
                         observation = exec_sql_prompt()
                         refresh = "Go back to System Message"

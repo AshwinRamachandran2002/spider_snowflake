@@ -169,6 +169,7 @@ class SNOWFLAKE_READ_SCHEMA_FROM_DDL(Action):
     def __repr__(self) -> str:
         return f'SNOWFLAKE_READ_SCHEMA_FROM_DDL(ddl_file_path="{self.ddl_file_path}")'
 
+@dataclass
 class SNOWFLAKE_JUSTIFY_DDL_RELEVANCE(Action):
     action_type: str = field(default="justify_json_file", init=False, repr=False, metadata={"help": 'type of action, c.f., "exec_sf_sql"'})
     ddl_reason: list[str] = field(metadata={"help": 'dictionary containing the reason for the relevance of each ddl file'})

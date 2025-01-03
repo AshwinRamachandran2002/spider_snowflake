@@ -19,7 +19,7 @@ logger = logging.getLogger("spider_agent.setup")
 class SetupController:
     def __init__(self, container, cache_dir):
         self.cache_dir = cache_dir
-        self.mnt_dir = f'/home/ashwin/Spider2/methods/spider-agent-snow/output/gpt-4o-column-4o-2/{container}'#[mount['Source'] for mount in container.attrs['Mounts']][0]
+        self.mnt_dir = f'/home/ashwin/Spider2/methods/spider-agent-snow/output/gpt-4o-agent-o1/{container}'#[mount['Source'] for mount in container.attrs['Mounts']][0]
         # self.container = container
         # self.mnt_dir = [mount['Source'] for mount in container.attrs['Mounts']][0]
         

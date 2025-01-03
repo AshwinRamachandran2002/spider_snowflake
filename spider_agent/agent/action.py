@@ -252,6 +252,44 @@ class SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE(Action):
         json_reason_str = ', '.join([f'{{"json_path": "{col["json_path"]}", "desciption": "{col["desciption"]}", "relevance_reason": "{col["relevance_reason"]}", "is_relevant": "{col["is_relevant"]}"}}' for col in self.json_reason])
         return f'SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE(json_reason={json_reason_str})'
 
+
+@dataclass
+class SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE(Action):
+    action_type: str = field(default="justify_json_file", init=False, repr=False, metadata={"help": 'type of action, c.f., "exec_sf_sql"'})
+    json_reason: list[str] = field(metadata={"help": 'dictionary containing the reason for the relevance of only relevant JSON file'})
+
+    @classmethod
+    def get_action_description(cls) -> str:
+        return """
+## SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE Action
+* Signature: SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE(json_reason=[{"json_path": "database_name/schema_name/table_name.json"}])
+* Description: Justifies the relevance of the JSON files.
+* Examples:
+  - Example1: SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE(json_reason=[{"json_path": "HOUSEHOLD/HOUSE_GROUP/HOUSE.json"}, {"json_path": "HOUSEHOLD/HOUSE_GROUP/COLLECTION.json"}])
+"""
+    @classmethod
+    def parse_action_from_text(cls, text: str) -> Optional['SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE']:
+        main_pattern = r'''
+            SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE\(
+                (.+)
+                \)
+        '''
+        match = re.search(main_pattern, text, flags=re.DOTALL | re.VERBOSE)
+        if not match:
+            return None
+        if '"' not in text:
+            text = text.replace("'", '"')
+        json_path = re.findall(r'"json_path":\s*"([^"]+?)"', text)
+
+        clause_tuple = []
+        for i in range(len(json_path)):
+            clause_tuple.append({"json_path": json_path[i], "desciption": "", "relevance_reason": "", "is_relevant": True})
+        return cls(json_reason=clause_tuple)
+
+    def __repr__(self) -> str:
+        json_reason_str = ', '.join([f'{{"json_path": "{col["json_path"]}", "desciption": "{col["desciption"]}", "relevance_reason": "{col["relevance_reason"]}", "is_relevant": "{col["is_relevant"]}"}}' for col in self.json_reason])
+        return f'SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE(json_reason={json_reason_str})'
+
 @dataclass
 class SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON(Action):
     action_type: str = field(default="inspect_data_in_json_file_of_table", init=False, repr=False, metadata={"help": 'type of action, c.f., "exec_sf_sql"'})
@@ -321,11 +359,15 @@ class SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE(Action):
             return None
         if '"' not in text:
             text = text.replace("'", '"')
+        
         table_names = re.findall(r'table_name=\s*"([^"]+?)"', text)
         column_names = re.findall(r'"column_name":\s*"([^"]+?)"', text)  
         reasons = re.findall(r'"relevance_reason":\s*"([^"]+?)"', text)
         is_relevant = re.findall(r'"is_relevant":\s*(.+?)\s*\}', text)
 
+        if len(is_relevant) != len(column_names) or len(reasons) != len(is_relevant):
+            print(text)
+            exit(0)
         column_justify = []
         for i in range(len(column_names)):
             if "true" in is_relevant[i].lower():            
@@ -336,6 +378,82 @@ class SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE(Action):
     def __repr__(self) -> str:
         table_column_justify_str = ', '.join([f'{{"column_name": "{col["column_name"]}", "relevance_reason": "{col["reason"]}"}}' for col in self.column_justify])
         return f'SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE(table_name="{self.table_name}", column_justify=[{table_column_justify_str}])'
+
+
+@dataclass
+class SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_TABLE(Action):
+    action_type: str = field(default="inspect__distinct_column_data_in_snowflake_table", init=False, repr=False, metadata={"help": 'type of action, c.f., "exec_sf_sql"'})
+    table_name: str = field(metadata={"help": 'table name'})
+    column_justify: list[dict] = field(metadata={"help": 'list of dict of relevant column names'})
+
+    @classmethod
+    def get_action_description(cls) -> str:
+        return """
+## SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_TABLE Action
+* Signature: SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_TABLE(table_name="table_name", column_justify=[{"column_name": "your_column_name1"}])
+* Description: Register relevant columns for a table on Snowflake
+* Examples:
+  - Example1: SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_TABLE(table_name="HOUSEHOLD.HOUSE_GROUP.COLLECTION", column_justify=[{"column_name": "dome_id"}])
+"""
+
+    @classmethod
+    def parse_action_from_text(cls, text: str) -> Optional['SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_TABLE']:
+        main_pattern = r'''
+            SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_TABLE\(
+                (.+)
+                \)
+        '''
+        match = re.search(main_pattern, text, flags=re.DOTALL | re.VERBOSE)
+        if not match:
+            return None
+        if '"' not in text:
+            text = text.replace("'", '"')
+        table_names = re.findall(r'table_name=\s*"([^"]+?)"', text)
+        column_names = re.findall(r'"column_name":\s*"([^"]+?)"', text)  
+
+        column_justify = []
+        for i in range(len(column_names)):
+            column_justify.append({"column_name": column_names[i], "reason": ""})
+
+        return cls(table_name=table_names[0], column_justify=column_justify)
+
+    def __repr__(self) -> str:
+        table_column_justify_str = ', '.join([f'{{"column_name": "{col["column_name"]}", "relevance_reason": "{col["reason"]}"}}' for col in self.column_justify])
+        return f'SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_TABLE(table_name="{self.table_name}", column_justify=[{table_column_justify_str}])'
+
+
+
+@dataclass
+class SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE(Action):
+    action_type: str = field(default="inspect__distinct_column_data_in_snowflake_table", init=False, repr=False, metadata={"help": 'type of action, c.f., "exec_sf_sql"'})
+    cte_name: str = field(metadata={"help": 'CTE name'})
+    table_column_justify: list[dict] = field(metadata={"help": 'list of dict of relevant column names'})
+
+    @classmethod
+    def get_action_description(cls) -> str:
+        return """
+## SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE Action
+* Signature: SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTES(cte_column_justify=[{"cte_name": "your_cte_name", "column_justify" : [{"table_column_name": "your_table_name.your_column_name1", "relevance_reason": "Reason for the relevance of the column"}, {"table_column_name": "your_table_name.your_column_name2", "relevance_reason": "Reason for the relevance of the column"}]}])
+* Description: Register relevant columns for all CTES on Snowflake
+* Examples:
+  - Example1: SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTES(cte_column_justify=[{"cte_name": "CollectionTable", "column_justify" : [{"table_column_name": "HOUSEHOLD.HOUSE_GROUP.COLLECTION.dome_id", "relevance_reason": "dome_id is required for CTE since it identifies domes for filter"}]})
+"""
+
+    @classmethod
+    def parse_action_from_text(cls, text: str) -> Optional['SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE']:
+        main_pattern = r'''
+            SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE\(
+                (.+)
+                \)
+        '''
+        match = re.search(main_pattern, text, flags=re.DOTALL | re.VERBOSE)
+        if not match:
+            return None
+        return cls(cte_name="", table_column_justify=[{}])
+
+    def __repr__(self) -> str:
+        return f'SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE(table_name="", column_justify=[])'
+
 
 
 @dataclass
@@ -448,8 +566,8 @@ class SNOWFLAKE_EXEC_SQL(Action):
         return """
 ## SNOWFLAKE_EXEC_SQL Action
 * Signature: SNOWFLAKE_EXEC_SQL(sql_query="SELECT your_column_1, your_column_2 FROM your_table_1", save_path="/workspace/output_file.csv")
-* Description: Executes a SQL query on Snowflake.
-The `save_path` CSV must be under the `/workspace` directory.
+* Description: Executes a SQL query on Snowflake. Please follow the syntax of action very very strictly
+The `save_path` CSV must be under the `/workspace` directory. 
 * Examples:
   - Example1: SNOWFLAKE_EXEC_SQL(sql_query="SELECT count(*) FROM DOMES.GROUP.SALES", save_path="/workspace/result.csv")
 """

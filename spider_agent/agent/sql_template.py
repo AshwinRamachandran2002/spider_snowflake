@@ -122,6 +122,7 @@ import pandas as pd
 import snowflake.connector
 import csv
 import io
+import sys
 
 # Load Snowflake credentials
 snowflake_credential = json.load(open("./snowflake_credential.json"))
@@ -143,7 +144,7 @@ sql_query = f\"\"\"
 
 # Execute the SQL query
 cursor.execute(sql_query)
-
+csv.field_size_limit(sys.maxsize)
 try:
     # Fetch the results
     results = cursor.fetchall()
@@ -162,7 +163,7 @@ try:
         else:
             csv_string = (df.to_csv(index=False, header=False))
             rows = list(csv.reader(io.StringIO(csv_string)))
-            rows = [row[0].replace('\\n', '') for row in rows]
+            rows = [",".join([cell.replace('\\n', '') for cell in row]) for row in rows]
             print("\\n".join(rows))
 
 except Exception as e:

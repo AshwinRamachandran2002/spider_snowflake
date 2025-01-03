@@ -43,6 +43,7 @@ def call_llm(payload):
                 return True, output_message
             except Exception as e:
                 logger.error("Failed to call LLM: " + str(e))
+                raise ValueError("Failed to call LLM")
                 if hasattr(e, 'response') and e.response is not None:
                     error_info = e.response.json()  
                     code_value = error_info['error']['code']
@@ -110,6 +111,22 @@ def call_llm(payload):
             azure_endpoint = os.environ['AZURE_ENDPOINT']
             )
         model_name = model.split("/")[-1]
+        
+            
+        o1_messages = []
+        messages = payload["messages"]
+
+        for i, message in enumerate(messages):
+            o1_message = {
+                "role": message["role"] if message["role"] != "system" else "user",
+                "content": ""
+            }
+            for part in message["content"]:
+                o1_message['content'] = part['text'] if part['type'] == "text" else ""
+                
+                o1_messages.append(o1_message)
+
+        payload["messages"] = o1_messages
         for i in range(3):
             try:
                 response = client.chat.completions.create(model=model_name,messages=payload['messages'], max_tokens=payload['max_tokens'], top_p=payload['top_p'], temperature=payload['temperature'], stop=stop)

@@ -15,11 +15,11 @@ logger = logging.getLogger("spider_agent.pycontroller")
 class PythonController:
     def __init__(self, container, work_dir="/workspace"):
         # self.container = container
-        self.mnt_dir = f'/home/ashwin/Spider2/methods/spider-agent-snow/output/gpt-4o-column-4o-2/{container}'#[mount['Source'] for mount in container.attrs['Mounts']][0]
+        self.mnt_dir = f'/home/ashwin/Spider2/methods/spider-agent-snow/output/gpt-4o-agent-o1/{container}'#[mount['Source'] for mount in container.attrs['Mounts']][0]
         # print("mnt_dir:", self.mnt_dir)
         self.work_dir = self.mnt_dir
-        
-        
+
+
     def get_file(self, file_path: str):
         """
         Gets a file from the docker container.
@@ -180,6 +180,20 @@ class PythonController:
         
         return observation
 
+    def execute_sf_exec_sql_query_random(self, sql_query):
+        sql_query = sql_query
+
+        script_content = SF_EXEC_SQL_QUERY_TEMPLATE.format(
+            sql_query=sql_query, is_save=False, save_path="")
+
+        temp_file_path = "temp_sql_script.py" 
+        # import pdb; pdb.set_trace()
+        observation = self.execute_python_file(temp_file_path, script_content)
+        self.execute_command(f"rm {temp_file_path}")
+        # if observation.startswith(f'File "{temp_file_path}"'):
+        #     observation = observation.split("\n", 1)[1]
+        
+        return observation
     def execute_sf_exec_sql_query_special(self, action):
         sql_query = action.sql_query
 
@@ -245,6 +259,7 @@ class PythonController:
         content = json.loads(self.get_file(json_file_path))
         
         info = {}
+        column_names = []
         info["table_fullname"] = content["table_fullname"]
         for i, column in enumerate(content["column_names"]):
             type = content["column_types"][i]
@@ -263,11 +278,27 @@ class PythonController:
                     vals[i] = float(val)
             distinct_vals = list(set(vals))
 
-            if not type == "TEXT" and not type == "BINARY":
-                info[column] = {"type": type, "description": description, "sample_values": distinct_vals[0]}
+            if not type == "TEXT" and not type == "BINARY" and not type == "VARIANT":
+                if len(distinct_vals) == 0:
+                    info[column] = {"type": type, "description": description, "sample_values": float(0)}
+                else:
+                    info[column] = {"type": type, "description": description, "sample_values": distinct_vals[0]}
             else:
-                info[column] = {"type": type, "description": description}
-        return info
+                if type == "TEXT" or type == "VARIANT":
+                    distinct_values = self.execute_sf_exec_sql_query_special3(column, content["table_fullname"])
+                    if type == "TEXT":
+                        if len(distinct_values[0]) > 100:
+                            distinct_values = [distinct_values[0][:100] + "..."]
+                    if len(distinct_values) == 20:
+                        distinct_values = distinct_values[:2]
+                    distinct_values = "\n--> " + distinct_values[0]
+                    if len(distinct_values) > 5000:
+                        distinct_values = distinct_values[:5000] + "..."
+                    info[column] = {"type": type, "description": description, "sample_values": [], "distinct_values": distinct_values}
+                else:
+                    info[column] = {"type": type, "description": description, "sample_values": []}
+            column_names.append(column)
+        return info, column_names
 
     def execute_sf_inspect_ddl(self, ddl_file_path):
         csv_content = self.get_file(ddl_file_path)
@@ -278,6 +309,13 @@ class PythonController:
                 refined_content += row + "\n"
                 continue
             refined_content += row + "\n"
+        # max_length = 40000  
+        # if len(refined_content) > max_length:
+        #     refined_content = ""
+        #     for row in csv_rows:
+        #         if not row.startswith("\t"):
+        #             refined_content += row + "\n"
+        #             continue
         return refined_content
 
     def execute_sf_info_ddl(self, ddl_file_paths):

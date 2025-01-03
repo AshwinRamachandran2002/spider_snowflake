@@ -37,55 +37,95 @@ Please Solve this task:
 If there is a 'result.csv' in the initial folder, the format of your answer must match it.
 """
 
+# 6. FILTER function:
+#     ```
+#     SELECT FILTER(
+#     [
+#         {{'name':'Pat', 'value': 50}},
+#         {{'name':'Terry', 'value': 75}},
+#         {{'name':'Dana', 'value': 25}}
+#     ],
+#     a -> a:value >= 50) AS "Filter >= 50";
+#     ```
+
+#     7. REUCE
+#     ```
+#     SELECT REDUCE([1,2,3], 0, (acc, val) -> acc + val) AS sum_of_values;
+#     ``` gives 6
+
+#     8. TRANSFORM
+#     ```
+#     SELECT TRANSFORM([1, 2, 3]::ARRAY(INT), a INT -> a * 2) AS "Multiply by Two (Structured)";
+#     ```
+#     9. GET function:
+#     ```
+#     SELECT *, GET(v, ARRAY_SIZE(v)-1) FROM colors;
+#     ```
+#     get the last element of the array
+# 3. For list of repeated values, use SQUARE_BRACKETS to access the list values. 
+#     -->For [{{"dealership":"number"}}, {{"dealership":"Sales"}}], use "column_name"[0].
 EXEC_SQL_SEMI_STRUCTURED  ="""
-Tips for Handling Semistructured Data:
-    1. If column is a dictionary, then you can use COLON to access the key value pair. For example, if {{"dealership": "Valley View Auto Sales"}}, you can access the dealership value by using column_name:dealership.
-    2. If column is a nested dictionary, then you can use COLON to access the first level key value and DOT to access the second level key value. For example, if {{"dealership": {{"city": "Phoenix","state": "AZ"}}}}, you can access the city value by using column_name:dealership.city.
-    3. If column is list of repeated values, then you can use SQUARE_BRACKETS to access the list values. For example, if [{{"dealership":"number"}}, {{"dealership":"Sales"}}], you can access the first value by using column_name[0].
-    4. To explicity cast a value to a specific data type, you can use the DOUBLE COLON, for example, column_name::NUMBER. By default, when VARCHARs, DATEs, TIMEs, and TIMESTAMPs are retrieved from a VARIANT column, the values are surrounded by double quotes
-    5. LATERAL FLATTEN(input => column_name) explodes nested values into separate columns. For example, if column_name is {{"animal": "dog", "sep": "tiger"}}, LATERAL FLATTEN(input => column_name) will explode the nested dictionary into separate columns as animal and sep.
-    6. FILTER function:
-    ```
-    SELECT FILTER(
-    [
-        {{'name':'Pat', 'value': 50}},
-        {{'name':'Terry', 'value': 75}},
-        {{'name':'Dana', 'value': 25}}
-    ],
-    a -> a:value >= 50) AS "Filter >= 50";
-    ```
-
-    7. REUCE
-    ```
-    SELECT REDUCE([1,2,3], 0, (acc, val) -> acc + val) AS sum_of_values;
-    ``` gives 6
-
-    8. TRANSFORM
-    ```
-    SELECT TRANSFORM([1, 2, 3]::ARRAY(INT), a INT -> a * 2) AS "Multiply by Two (Structured)";
-    ```
-    9. GET function:
-    ```
-    SELECT *, GET(v, ARRAY_SIZE(v)-1) FROM colors;
-    ```
-    get the last element of the array
-    10. Always enclose column names in double quotes. For example, "column_name".
+You must follow this strictly:
+    Tips for Handling Semistructured Data:
+    1. For Dictionary, use COLON to access the key value pair.
+    -->For {{"dealership": "Valley View Auto Sales"}}, use "column_name":dealership.
+    2. For Nested Dictionary, use COLON for first level key value and DOT for second level.
+    -->For {{"dealership": {{"city": "Phoenix","state": "AZ"}}}}, use "column_name":dealership.city.
+    4. To explicity cast a value to a specific data type, you can use the DOUBLE COLON, for example, "column_name"::NUMBER. By default, when VARCHARs, DATEs, TIMEs, and TIMESTAMPs are retrieved from a VARIANT column, the values are surrounded by double quotes
+    5. LATERAL FLATTEN(input => "column_name") explodes nested values into separate columns. For example, if column_name is {{"animal": "dog", "sep": "tiger"}}, LATERAL FLATTEN(input => "column_name") will explode the nested dictionary into separate columns as animal and sep.
+    6. If you want to expand two columns simultaneously using lateral flatten, then use where "column_name_1".index = "column_name_2".index.
+    6. Always enclose column names in double quotes. For example, "column_name".
     
-    Another Tip:
-    Try to write SQLs in multiple steps like this:
-    ```
-    WITH Table_1 AS (
+    
+    Adhere to this particular format strictly to write SQLs through multiple steps like this:
+    sql_query="
+    WITH Table_1 AS (\n
         SQL_1
-    ),
-    Table_2 AS (
+    ),\n
+    Table_2 AS (\n
         SQL_2
-    ),
-    Table_3 AS (
+    ),\n
+    Table_3 AS (\n
         SQL_3
-    )
+    )\n
     SQL_4;
-    ```
+    "
+    Each CTE should start in a new line.
     \n\n
+    Break the SQL into smaller CTEs. Breaking down into smaller CTEs will help you debug the SQL query easily.
+    The CTEs must individually be informative to a user not random SQLs.
+    
+    Example to use Lateral Flatten:
+    ```
+    create or replace table persons as
+        select column1 as id, parse_json(column2) as c
+    from values
+    (12712555,
+    '{ name:  { first: "John", last: "Smith"},
+        contact: [
+        { business:[
+        { type: "phone", content:"555-1234" },
+        { type: "email", content:"j.smith@company.com" } ] } ] }'),
+    (98127771,
+    '{ name:  { first: "Jane", last: "Doe"},
+        contact: [
+        { business:[
+        { type: "phone", content:"555-1236" },
+        { type: "email", content:"j.doe@company.com" } ] } ] }') v;
+
+    -- Note the multiple instances of LATERAL FLATTEN in the FROM clause of the following query.
+    -- Each LATERAL view is based on the previous one to refer to elements in
+    -- multiple levels of arrays.
+
+    SELECT id as "ID",
+    f.value AS "Contact",
+    f1.value:type AS "Type",
+    f1.value:content AS "Details"
+    FROM persons p,
+    lateral flatten(input => p.c, path => 'contact') f,
+    lateral flatten(input => f.value:business) f1;
+    ```
+    Never assume a list has only a certain number of elements. It is always better to generalize using Lateral Flatten. Hence, do not use list index to access the values. use lateral flatten instead.
 """
 
 

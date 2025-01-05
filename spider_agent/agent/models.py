@@ -11,7 +11,7 @@ from openai import AzureOpenAI
 from typing import Dict, List, Optional, Tuple, Any, TypedDict
 import dashscope
 from groq import Groq
-import google.generativeai as genai
+# import google.generativeai as genai
 import openai
 import requests
 import tiktoken

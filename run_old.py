@@ -3,20 +3,16 @@ import datetime
 import json
 import logging
 import os
-import random
 import sys
 import glob
 import dotenv
 
 dotenv.load_dotenv()
 
-from tqdm import tqdm
-
-from spider_agent.envs.spider_agent import Spider_Agent_Env
-from spider_agent.agent.agents import PromptAgent
+from old_agent.envs.spider_agent import Spider_Agent_Env
+from old_agent.agent.agents import PromptAgent
 
 
-#  Logger Configs {{{ #
 logger = logging.getLogger("spider_agent")
 logger.setLevel(logging.DEBUG)
 
@@ -145,25 +141,12 @@ def test(
                 indices = list(map(int, args.example_index.split(",")))
                 task_configs = [task_configs[i] for i in indices]
 
-    instance_db = json.load(open("instance_db.json", "r"))
     for task_config in task_configs:
-        # try:
+        try:
             instance_id = experiment_id +"/"+ task_config["instance_id"]
 
-            # if task_config["instance_id"] not in ['sf_local031', 'sf_local035', 'sf_local034', 'sf_local028', 'sf_local030', 'sf_bq226', 'sf_bq091', 'sf_bq222', 'sf_bq210', 'sf_bq033', 'sf_bq223', 'sf_bq099', 'sf_bq221', 'sf_bq209', 'sf_bq213', 'sf_local039', 'sf_local038', 'sf_local022', 'sf_local259', 'sf_local026', 'sf_bq219', 'sf_bq253', 'sf_bq254', 'sf_bq017', 'sf_bq349', 'sf_bq041', 'sf_bq303', 'sf_bq308', 'sf_bq121', 'sf_bq309', 'sf_bq310', 'sf_bq280', 'sf_bq301', 'sf_bq300', 'sf_local269', 'sf_local274', 'sf_local273', 'sf_bq273', 'sf_bq265', 'sf_bq263', 'sf_bq264', 'sf_bq260', 'sf_bq271', 'sf_bq233', 'sf_bq194', 'sf_bq295', 'sf_bq377', 'sf_bq100', 'sf_bq252', 'sf_bq359', 'sf_bq193', 'sf_bq255', 'sf_bq248', 'sf_local063', 'sf_local067', 'sf_local360', 'sf_local329', 'sf_local075', 'sf_local285', 'sf_local300', 'sf_local299', 'sf_local157', 'sf_local064', 'sf_local156', 'sf_local099', 'sf_local019', 'sf_local141', 'sf_local132', 'sf_local131', 'sf_local003', 'sf_local002', 'sf_local004', 'sf_local336', 'sf_local355', 'sf_local354', 'sf_local309', 'sf_local311', 'sf_bq278', 'sf_local049', 'sf_local065', 'sf_local073', 'sf_local041', 'sf014', 'sf_local194', 'sf_local199', 'sf_local195', 'sf_local056', 'sf_bq286', 'sf_local263', 'sf_local081', 'sf_local209', 'sf_local210', 'sf_bq229', 'sf_bq104', 'sf_bq035', 'sf_bq216', 'sf_bq127', 'sf_local009', 'sf_local010', 'sf_local244', 'sf_local168', 'sf_local071', 'sf_local072', 'sf_local054', 'sf_bq130', 'sf_bq284', 'sf_bq412', 'sf_bq397', 'sf_bq012', 'sf_bq187', 'sf_local152', 'sf_bq442', 'sf_bq458', 'sf_local058', 'sf_local059', 'sf_bq028', 'sf011', 'sf_bq072']:
-            #     continue
-            # if task_config["instance_id"] not in ['sf_bq193', 'sf_bq223', 'sf_bq248', 'sf_bq028', 'sf_bq033', 'sf_bq091', 'sf_bq099']:
-            #     continue
-            # if task_config["instance_id"] not in [ "sf_bq035", "sf_bq255", "sf_bq130", "sf_bq213", "sf_bq280", "sf_bq286", "sf_bq301", "sf_bq359", "sf_local004", "sf_local019", "sf_local028", "sf_local031", "sf_local065", "sf_local199", "sf_local244"]:
-            #     continue
-            # if task_config["instance_id"] not in ['sf_local031', 'sf_local035', 'sf_local034', 'sf_local028', 'sf_local030', 'sf_bq226', 'sf_bq091', 'sf_bq222', 'sf_bq210', 'sf_bq033', 'sf_bq223', 'sf_bq099', 'sf_bq221', 'sf_bq209', 'sf_bq213', 'sf_local039', 'sf_local038', 'sf_local022', 'sf_local259', 'sf_local026', 'sf_bq376', 'sf_bq339', 'sf_bq294', 'sf_bq081', 'sf_bq022', 'sf_bq076', 'sf_bq077', 'sf_bq363', 'sf_bq362', 'sf_bq155', 'sf_bq219', 'sf_bq253', 'sf_bq254', 'sf_bq017', 'sf_bq349', 'sf_bq041', 'sf_bq303', 'sf_bq308', 'sf_bq121', 'sf_bq309', 'sf_bq310', 'sf_bq280', 'sf_bq301', 'sf_bq300', 'sf_bq289', 'sf_bq185', 'sf_bq203', 'sf_bq040', 'sf_local269', 'sf_local274', 'sf_local273', 'sf_bq273', 'sf_bq265', 'sf_bq263', 'sf_bq264', 'sf_bq260', 'sf_bq271', 'sf_bq399', 'sf_bq398', 'sf_bq424', 'sf_bq328', 'sf_bq068', 'sf_bq083', 'sf_bq334', 'sf_bq093', 'sf_bq444', 'sf_bq341', 'sf_bq057', 'sf_bq065', 'sf_bq233', 'sf_bq194', 'sf_bq295', 'sf_bq377', 'sf_bq100', 'sf_bq252', 'sf_bq359', 'sf_bq193', 'sf_bq255', 'sf_bq248', 'sf_local063', 'sf_local067', 'sf_local360', 'sf_local329', 'sf_local075', 'sf_local285', 'sf_local300', 'sf_local299', 'sf_local157', 'sf_local064', 'sf_local156', 'sf_local099', 'sf_local019', 'sf_local141', 'sf_local132', 'sf_local131', 'sf_local003', 'sf_local002', 'sf_local004', 'sf_local336', 'sf_local355', 'sf_local354', 'sf_local309', 'sf_local311', 'sf_bq278', 'sf_local049', 'sf_local065', 'sf_local073', 'sf_local041', 'sf014', 'sf_bq112', 'sf_local194', 'sf_local199', 'sf_local195', 'sf_local056', 'sf_bq286', 'sf_local263', 'sf_local081', 'sf_bq056', 'sf_local209', 'sf_local210', 'sf_bq420', 'sf_bq229', 'sf_bq176', 'sf_bq166', 'sf_bq050', 'sf_bq015', 'sf_bq432', 'sf_bq285', 'sf_bq104', 'sf_bq035', 'sf_bq216', 'sf_bq127', 'sf_local009', 'sf_local010', 'sf_local244', 'sf_local168', 'sf_local071', 'sf_local072', 'sf_local054', 'sf_bq130', 'sf_bq250', 'sf_bq281', 'sf_bq282', 'sf_bq279', 'sf_bq284', 'sf_bq412', 'sf_bq397', 'sf_bq012', 'sf_bq187', 'sf_local152', 'sf_bq442', 'sf_bq276', 'sf_bq085', 'sf_bq429', 'sf_bq458', 'sf_bq291', 'sf_local058', 'sf_local059', 'sf_bq028', 'sf011', 'sf_bq072']:             
-            #     continue
-            if task_config["instance_id"] not in ['sf_bq022']:
-                continue
-            
             output_dir = os.path.join(args.output_dir, instance_id)
             result_json_path =os.path.join(output_dir, "spider/result.json")
-
 
             task_type = None
             if task_config["instance_id"].startswith("bq") or task_config["instance_id"].startswith("ga"):
@@ -247,14 +230,12 @@ def test(
                         print(f"Deleted: {file_path}")
                     except Exception as e:
                         print(f"Error deleting {file_path}: {e}")
-            
-            
+
             logger.info("Finished %s", instance_id)
-            # env.close()
-        # except Exception as e:
-        #     logger.error("Error in %s: %s", task_config["instance_id"], e)
-        #     # env.close()
-        #     continue
+
+        except Exception as e:
+            logger.error("Error in %s: %s", task_config["instance_id"], e)
+            continue
 
 if __name__ == '__main__':
     args = config()

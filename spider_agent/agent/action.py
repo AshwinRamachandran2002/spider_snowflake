@@ -604,6 +604,136 @@ The `save_path` CSV must be under the `/workspace` directory.
         return f'SNOWFLAKE_EXEC_SQL(sql_query="{self.sql_query}", save_path="{self.save_path}")'
 
 
+
+@dataclass
+class SNOWFLAKE_MODIFY_CTE(Action):
+    action_type: str = field(default="execute_snowflake_SQL", init=False, repr=False, metadata={"help": 'type of action, c.f., "exec_sf_sql"'})
+    sql_query: str = field(metadata={"help": 'SQL query to execute'})
+    cte_name: str = field(metadata={"help": 'CTE name'})
+
+    @classmethod
+    def get_action_description(cls) -> str:
+        return """
+## SNOWFLAKE_MODIFY_CTE Action
+* Signature: SNOWFLAKE_MODIFY_CTE(sql_query="WITH CTE1 AS ( SELECT your_column_1, your_column_2 FROM your_table_1 )", cte_name="CTE1", reason="reason for modifying the CTE")
+* Description: Executes a SQL query on Snowflake. Please follow the syntax of action very very strictly. The sql query must follow the same format of the CTE it is modifying.
+* Examples:
+  - Example1: SNOWFLAKE_MODIFY_CTE(sql_query="CTE1 AS (SELECT count(*) FROM DOMES.GROUP.SALES)", cte_name="CTE1", reason="CTE had error before")
+"""
+    @classmethod
+    def parse_action_from_text(cls, text: str) -> Optional['SNOWFLAKE_MODIFY_CTE']:
+        main_pattern = r'''
+            SNOWFLAKE_MODIFY_CTE\(
+                \s*sql_query\s*=\s*
+                (?P<quote_sql>\"\"\"|\"|\'\'\'|\'|\"\"\")  # Match opening quote for sql_query
+                (?P<sql_query>.*?)
+                (?<!\\)(?P=quote_sql)                      # Match closing quote for sql_query
+                ,\s*cte_name\s*=\s*
+                (?P<quote_cte>\"\"\"|\"|\'\'\'|\'|\"\"\")  # Match opening quote for sql_query
+                (?P<cte_name>.*?)
+                (?<!\\)(?P=quote_cte)                      # Match closing quote for sql_query
+                ,\s*reason\s*=\s*
+                    (?P<quote_path>\"\"\"|\"|\'\'\'|\'|\"\"\")  # Match opening quote for save_path
+                    (?P<save_path>.*?)
+                    (?<!\\)(?P=quote_path) 
+                \s*\)
+        '''
+        match = re.search(main_pattern, text, flags=re.DOTALL | re.VERBOSE)
+        if match:
+            # Extracting sql_query
+            sql_query_raw = match.group('sql_query')
+            sql_query = sql_query_raw.replace(r'\"', '"').replace(r"\'", "'").replace('\\\\', '\\')
+            
+            # Extracting cte_name
+            cte_name_raw = match.group('cte_name')
+            cte_name = cte_name_raw.replace(r'\"', '"').replace(r"\'", "'").replace('\\\\', '\\')
+
+            return cls(sql_query=sql_query, cte_name=cte_name)
+        return None
+
+    def __repr__(self) -> str:
+        return f'SNOWFLAKE_MODIFY_CTE(sql_query="{self.sql_query}", cte_name="{self.cte_name}")'
+
+
+
+
+
+@dataclass
+class SNOWFLAKE_Yes_NO(Action):
+    action_type: str = field(default="execute_snowflake_SQL", init=False, repr=False, metadata={"help": 'type of action, c.f., "exec_sf_sql"'})
+    question: str = field(metadata={"help": 'SQL query to execute'})
+
+    @classmethod
+    def get_action_description(cls) -> str:
+        return """
+## SNOWFLAKE_Yes_NO Action
+* Signature: SNOWFLAKE_Yes_NO(question="The CTE has multiple rows. My reasoning is that it can have it. Is it correct?")
+* Description: Ask a question for help.
+"""
+    @classmethod
+    def parse_action_from_text(cls, text: str) -> Optional['SNOWFLAKE_MODIFY_CTE']:
+        main_pattern = r'''
+            SNOWFLAKE_Yes_NO\(
+                \s*question\s*=\s*
+                (?P<quote_sql>\"\"\"|\"|\'\'\'|\'|\"\"\")  # Match opening quote for sql_query
+                (?P<question>.*?)
+                (?<!\\)(?P=quote_sql)                      # Match closing quote for sql_query
+                \s*\)
+        '''
+        match = re.search(main_pattern, text, flags=re.DOTALL | re.VERBOSE)
+        if match:
+            # Extracting sql_query
+            sql_query_raw = match.group('question')
+            sql_query = sql_query_raw.replace(r'\"', '"').replace(r"\'", "'").replace('\\\\', '\\')
+
+            return cls(question=sql_query)
+        return None
+
+    def __repr__(self) -> str:
+        return f'SNOWFLAKE_Yes_NO(question="{self.question})'
+
+@dataclass
+class SNOWFLAKE_REGISTER_CTE(Action):
+    action_type: str = field(default="execute_snowflake_SQL", init=False, repr=False, metadata={"help": 'type of action, c.f., "exec_sf_sql"'})
+    sql_query: str = field(metadata={"help": 'SQL query to execute'})
+    
+
+    @classmethod
+    def get_action_description(cls) -> str:
+        return """
+## SNOWFLAKE_REGISTER_CTE Action
+* Signature: SNOWFLAKE_REGISTER_CTE(sql_query="(WITH/"") CTE1 AS (SELECT your_column_1, your_column_2 FROM your_table_1)", reason="reason for registering the CTE")
+* Description: Executes a SQL query on Snowflake. Please follow the syntax of action very very strictly. The sql query must follow the same format of the CTE it is registering.
+Add WITH only if the given CTE has it. 
+* Examples:
+  - Example1: SNOWFLAKE_REGISTER_CTE(sql_query="CTE1 AS (SELECT count(*) FROM DOMES.GROUP.SALES)", reason="CTE is required to filter the sales data")
+"""
+    @classmethod
+    def parse_action_from_text(cls, text: str) -> Optional['SNOWFLAKE_REGISTER_CTE']:
+        main_pattern = r'''
+            SNOWFLAKE_REGISTER_CTE\(
+                \s*sql_query\s*=\s*
+                (?P<quote_sql>\"\"\"|\"|\'\'\'|\'|\"\"\")  # Match opening quote for sql_query
+                (?P<sql_query>.*?)
+                (?<!\\)(?P=quote_sql)                      # Match closing quote for sql_query
+                ,\s*reason\s*=\s*
+                    (?P<quote_path>\"\"\"|\"|\'\'\'|\'|\"\"\")  # Match opening quote for save_path
+                    (?P<save_path>.*?)
+                    (?<!\\)(?P=quote_path) 
+                \s*\)
+        '''
+        match = re.search(main_pattern, text, flags=re.DOTALL | re.VERBOSE)
+        if match:
+            # Extracting sql_query
+            sql_query_raw = match.group('sql_query')
+            sql_query = sql_query_raw.replace(r'\"', '"').replace(r"\'", "'").replace('\\\\', '\\')
+
+            return cls(sql_query=sql_query)
+        return None
+
+    def __repr__(self) -> str:
+        return f'SNOWFLAKE_REGISTER_CTE(sql_query="{self.sql_query})'
+
 @dataclass
 class Terminate(Action):
 

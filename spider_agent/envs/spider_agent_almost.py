@@ -15,7 +15,7 @@ from spider_agent.controllers.python import PythonController
 from spider_agent.controllers.setup import SetupController
 from spider_agent.envs.utils import *
 from spider_agent import configs
-from spider_agent.agent.action import Action, Terminate, SNOWFLAKE_EXEC_SQL, SNOWFLAKE_Yes_NO, SNOWFLAKE_REGISTER_CTE, SNOWFLAKE_MODIFY_CTE, SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON, SNOWFLAKE_READ_SCHEMA_FROM_DDL, SNOWFLAKE_JUSTIFY_DDL_RELEVANCE, SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE, SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE, SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE,SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE, PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS, SNOWFLAKE_CHECK_IF_CONDITIONAL_CLAUSES_WORK, SNOWFLAKE_FIND_DISTINCT_VALUES_IN_THE_COLUMN
+from spider_agent.agent.action import Action, Terminate, SNOWFLAKE_EXEC_SQL, SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON, SNOWFLAKE_READ_SCHEMA_FROM_DDL, SNOWFLAKE_JUSTIFY_DDL_RELEVANCE, SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE, SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE, SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE,SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE, PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS, SNOWFLAKE_CHECK_IF_CONDITIONAL_CLAUSES_WORK, SNOWFLAKE_FIND_DISTINCT_VALUES_IN_THE_COLUMN
 from spider_agent.agent.prompts import EXEC_SQL_SEMI_STRUCTURED
 import signal
 
@@ -289,17 +289,15 @@ class Spider_Agent_Env(gym.Env):
                         observation += "The column is of type: " + go_in(json_ting) + "\n"
         return observation + "-"*50 + "\n\n\n"
 
-    def exec_sql_prompt(self, sql=None, partial=False):
-        observation = ""
-        if not partial:
-            observation = "\nNow, you can generate the SQL query using SNOWFLAKE_EXEC_SQL\n\n"
-            observation += "\nFunction Signature: \n" + SNOWFLAKE_EXEC_SQL.get_action_description() + "\n"
-            observation += "\nYou can terminate using: \n" + Terminate.get_action_description() + "\n"
-            observation += self.represent_registered_info()
-            observation = EXEC_SQL_SEMI_STRUCTURED + observation
-            observation = "\n\nExternal Information:\n" + observation + "\n\n" + self.md_files_content
-            observation += "\n\nRemember that the sample values present above are chosen at random and not exhaustive."
+    def exec_sql_prompt(self, sql=None):
+        observation = "\nNow, you can generate the SQL query using SNOWFLAKE_EXEC_SQL\n\n"
+        observation += "\nFunction Signature: \n" + SNOWFLAKE_EXEC_SQL.get_action_description() + "\n"
+        observation += "\nYou can terminate using: \n" + Terminate.get_action_description() + "\n"
+        observation += self.represent_registered_info()
+        observation = EXEC_SQL_SEMI_STRUCTURED + observation
+        observation = "\n\nExternal Information:\n" + observation + "\n\n" + self.md_files_content
         observation += "\n\nTask is: " + self.instruction + "\n\n"
+        observation += "\n\nRemember that the sample values present above are chosen at random and not exhaustive."
         # observation += "\n\nBefore writing the SQL, justify for each CTE you are going to write, the relevance of each column using function signature: \n" + SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE.get_action_description() + "\n"
         if sql:
             observation += "LLM predicted SQL Query:\n" + sql + "\n\n"
@@ -379,55 +377,6 @@ class Spider_Agent_Env(gym.Env):
                     observation += json_file_justify_prompt()
                     return observation
 
-                def get_cte_obs_prompt(sql, cte):
-                    observation_exec = self.controller.execute_sf_exec_sql_query_random(sql)
-                    
-                    major_error = False
-                    if "No data found" in observation_exec:
-                        observation = "\n\nThe following CTE of the SQL returns no data."
-                        major_error = True
-                    elif "Traceback" in observation_exec:
-                        observation = "\n\nThe following CTE of the SQL returns an error." + observation_exec + "\n\n"
-                        major_error = True
-
-                    if major_error:
-                        observation += "\n\nModify this CTE only and generate it with modifications."
-                        observation += "\n\nError is in this CTE: " + cte + "\n\n"
-                        observation += "\n\nTask is: " + self.instruction + "\n\n"
-                        observation += "\n\nFirst see if you are accessing the columns correctly. Look at their data types."
-                        observation += "\n\nTake help from the TIPs to handle semi-structured data\n\n"
-                        observation += "\n\nEnter the moodified CTE using:" + SNOWFLAKE_MODIFY_CTE.get_action_description() + "\n"
-                        observation += "\n\nYou are not allowed to modify any other CTE."
-                        return observation
-                
-
-                    if len(observation_exec) > 1000:
-                        lines = observation_exec.split("\n")
-                        observation_exec = "Printing just the first 5 line since output is very big:\n"
-                        for i, line in enumerate(lines[:6]):
-                            observation_exec += "Line " + str(i) + ": "
-                            for i, ele in enumerate(line.split(",")):
-                                if ele == "":
-                                    ele = "NULL_VALUE"
-                                observation_exec += ele 
-                                if i != len(line.split(",")) - 1:
-                                    observation_exec += ","
-                            observation_exec += "\n"                            
-                            
-                        if len(observation_exec) > 1000:
-                            observation_exec = observation_exec[:1000] + "..."
-
-                    observation = "\n\nResult for this CTE: " + cte + "\n\n is \n```\n" + observation_exec + "\n```\n\n"
-                    observation += "\n\nCheck carefully if the output is as expected. If not, modify the CTE accordingly. "
-                    observation += "\n\nLook at unexpected repetitions in rows, null values in columns, and formats of the columns."
-                    observation += "\n\nLook at null values in columns. If you suspect mistakes, look back at the columns and tables given and try other olumns you may have missed."
-                    observation += "\n\nAny modifications must be made to this CTE not any other."
-                    observation += "\n\nTask is: " + self.instruction
-                    observation += "\n\nIf the output is correct, register the CTE using: " + SNOWFLAKE_REGISTER_CTE.get_action_description()
-                    observation += "\n\nIf the output is not correct, modify the CTE using: " + SNOWFLAKE_MODIFY_CTE.get_action_description()
-                    # observation += "\n\nIf you are not confident about something, you also have the option to ask though yes/no questions using: " + SNOWFLAKE_Yes_NO.get_action_description()
-                    return observation
-
                 if isinstance(action, PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS):
                     observation = self.controller.execute_PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS(action)
                     self.predicted_obs = observation
@@ -459,13 +408,6 @@ class Spider_Agent_Env(gym.Env):
                         if desc["is_relevant"]:
                             self.ddl_files.append(desc["ddl_path"])
                     observation = ddl_file_prompt()
-
-                elif isinstance(action, SNOWFLAKE_Yes_NO):
-                    ans = input("Enter Yes or No for the question: " + action.question + "\n")
-                    if ans.lower() == "yes":
-                        observation = "Yes"
-                    else:
-                        observation = "No"
 
                 elif isinstance(action, SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE) or isinstance(action, SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE):
                     json_desc = action.json_reason
@@ -535,17 +477,16 @@ class Spider_Agent_Env(gym.Env):
 
 
                 elif isinstance(action, SNOWFLAKE_EXEC_SQL):
-                    self.indi_sqls = []
-                    self.tables = []
+                    self.last_sql = action.sql_query
+
+                    breaking_sql = []
+                    indi_sqls = []
                     past_sql = ""
                     curr_sql = ""
                     curr_table = ""
-                    self.last_major_sql = ""
-                    for j, line in enumerate(action.sql_query.split("\n")):
+                    for line in action.sql_query.split("\n"):
                         line = line
                         if line.lower().startswith("select"):
-                            for k in range(j, len(action.sql_query.split("\n"))):
-                                self.last_major_sql += action.sql_query.split("\n")[k] + "\n"
                             break
                         elif "as (" in line.lower():
                             curr_sql += line + "\n"
@@ -554,66 +495,134 @@ class Spider_Agent_Env(gym.Env):
                             else:
                                 curr_table = line.split(" ")[0]
                         elif line.lower().startswith(")"):
-                            temp_sql = curr_sql + ")"
-                            if past_sql:
-                                self.indi_sqls.append(temp_sql.replace(past_sql + ",\n", "")) 
-                            else:
-                                self.indi_sqls.append(temp_sql) 
-                                
-                            past_sql = temp_sql
-                            self.tables.append(curr_table)
-                            curr_sql += line + "\n"
+                            temp_sql = curr_sql + line.split(",")[0] + "\n"
+                            indi_sqls.append(temp_sql.replace(past_sql, ""))     
+                            past_sql = temp_sql            
+                            # breaking_sql.append(temp_sql + "select * from " + curr_table + " ;\n")
+                            breaking_sql.append(temp_sql + "select * from " + curr_table + " limit 20;\n")
+                            curr_sql += line + "\n"                     
                         else:
                             curr_sql += line + "\n"
 
-                    self.cte_obs = 0
-                    # for i in range(len(self.indi_sqls)):
-                    #     print("CTE", i, ":", self.indi_sqls[i])
-                    #     print("Table", i, ":", self.tables[i])
-                    # input("Press Enter to continue")
-                    partial_sql = self.indi_sqls[0] + "\n" + "select * from " + self.tables[0] + " limit 20;"
-                    observation = get_cte_obs_prompt(partial_sql, self.indi_sqls[0])
-
-                elif isinstance(action, SNOWFLAKE_MODIFY_CTE):
-                    cte_name = action.cte_name
-                    for i in range(self.cte_obs):
-                        if self.tables[i] == cte_name:
-                            self.cte_obs = i
+                    error = False
+                    i = 0
+                    observation_tots = ""
+                    for sql in breaking_sql:
+                        observation_exec = self.controller.execute_sf_exec_sql_query_random(sql)
+                        # print("obs", observation_exec)
+                        # print("sql", sql)
+                        observation = "\nResult is:```\n" + observation_exec + "\n```\n\n"
+                        if "No data found" in observation_exec:
+                            observation = "\n\nThe following CTE of the SQL returns no data. Modify this CTE only and generate the whole SQL again."
+                            if i == 0:
+                                cte = indi_sqls[i]
+                            else:
+                                cte = indi_sqls[i].replace(indi_sqls[i-1][:-1], "")
+                            observation += "\n\nError is in this CTE: " + cte + "\n\n"
+                            observation += "\n\nTask is: " + self.instruction + "\n\n"
+                            observation += "\n\nTake help from the TIPs to handle semi-structured data\n\n"
+                            error = True
                             break
-                    self.indi_sqls[self.cte_obs] = action.sql_query
-                    partial_sql = ",\n".join(self.indi_sqls[:self.cte_obs+1]) + "\n" + "select * from " + self.tables[self.cte_obs] + " limit 20;"
-                    observation = get_cte_obs_prompt(partial_sql, self.indi_sqls[self.cte_obs])
+                        elif "Traceback" in observation_exec:
+                            observation = "\n\nThe following CTE of the SQL returns an error. Modify this CTE only and generate the whole SQL again."
+                            observation += "Note that all the previous CTEs gave non null or non erroneous results, when the last CTE in the above SQL was added, it gave error. Check this last CTE for error"
+                            if i == 0:
+                                cte = indi_sqls[i]
+                            else:
+                                cte = indi_sqls[i].replace(indi_sqls[i-1][:-1], "")
+                            observation += "\n\nError is in this CTE: " + cte + "\n\n"
+                            observation += "\n The ouptut was:```\n" + observation_exec + "\n```\n\n"
+                            observation += "\n\nTask is: " + self.instruction + "\n\n"
+                            observation += "\n\nTake help from the TIPs to handle semi-structured data\n\n"
+                            
+                            error = True
+                            break
+                        elif "UNKOWN" in observation_exec:
+                            observation += "You are not allowed to use COALESCE in the SQL. Fuck you, dont try to cheat your way\n\n"
+                        elif ",," in observation_exec or ',\n' in observation_exec or '""' in observation_exec:
+                            print("\n".join(observation_exec.split("\n")[:5]))
+                            problem_line = []
+                            problem_col = []
+                            for line in observation_exec.split("\n"):
+                                for j, ele in enumerate(line.split(",")):
+                                    if ele == "" or ele == '""' or ele == "[]":
+                                        if j not in problem_col:
+                                            problem_line.append(line)
+                                            problem_col.append(j)
+                            observation = "\n\nThe following CTE of the SQL returns null data in some columns. Modify this CTE only and generate the whole SQL again."
+                            
+                            observation += "\n\nFor example,\n"
+                            for j, col in enumerate(problem_col):
+                                observation += "\nColumn Number: " + str(col +1) + " has null value in this line of the result: " + str(problem_line[j]) + "\n"                              
+                            observation += "Modify CTE to handle these null values in the CTE\n\n"  
+                            if i == 0:
+                                cte = indi_sqls[i]
+                            else:
+                                cte = indi_sqls[i].replace(indi_sqls[i-1][:-1], "")
+                            observation += "\n\nError is in this CTE: " + cte + "\n\n"                            
+                            observation += "\n\nTask is: " + self.instruction + "\n\n"
+                            observation += "\n\nTake help from the TIPs to handle semi-structured data\n\n"
+                            observation += "\n\nDont assume errors in the database and change the question, always change the SQL syntax or break down into more CTEs.\n\n"
+                            observation += "\n\nBefore using COALESCE see if you used the wrong columns, refer to the given tables and columns and examples.\n\n"
+                            
+                            error = True
+                            break
+                        else:
+                            if i == 0:
+                                cte = indi_sqls[i]
+                            else:
+                                cte = indi_sqls[i].replace(indi_sqls[i-1][:-1], "")
+                            if len(observation_exec) > 1000:
+                                lines = observation_exec.split("\n")
+                                observation_exec = "Printing just the first line since output is very big:\n" + "\n".join(lines[:2])
+                                if len(observation_exec) > 1000:
+                                    observation_exec = observation_exec[:1000] + "..."
+                            observation_tots += "\n\nResult after the CTE: " + cte + "\n\n```\n" + observation_exec + "\n```\n\n"
+                            
+                        i += 1
 
-                elif isinstance(action, SNOWFLAKE_REGISTER_CTE):
-                    self.indi_sqls[self.cte_obs] = action.sql_query
-                    self.cte_obs += 1
-                    full_sql = ",\n".join(self.indi_sqls) + "\n" + self.last_major_sql
-                    if self.cte_obs < len(self.indi_sqls):
-                        observation = self.exec_sql_prompt(full_sql, partial=True) + "\n\n"
-                        partial_sql = ",\n".join(self.indi_sqls[:self.cte_obs+1]) + "\n" + "select * from " + self.tables[self.cte_obs] + " limit 20;"
-                        observation += get_cte_obs_prompt(partial_sql, self.indi_sqls[self.cte_obs])
-                    elif self.cte_obs == len(self.indi_sqls):
-                        observation = self.exec_sql_prompt(full_sql, partial=True) + "\n\n"
-                        observation_exec = self.controller.execute_sf_exec_sql_query_random(full_sql)
+                    if error:
+                        if not self.curr_error == -1 and self.curr_error != i:
+                            observation = self.exec_sql_prompt(action.sql_query) + "\n\n" + observation
+                            refresh = "Go back to System Message"
+                        self.curr_error = i
+                        observation += self.represent_registered_info()
+
+                    if not error:
+                        
+                        print("self.curr_errro", self.curr_error)
+                        if self.curr_error == -2:
+                            observation = ""
+                        elif not self.curr_error == -1:
+                            observation = self.exec_sql_prompt(action.sql_query) + "\n\n"
+                            refresh = "Go back to System Message"
+                            self.curr_error = -2
+                        else:
+                            observation = ""
+                            
+                        observation += observation_tots + "Check if the outputs of the above CTEs are as expected. If not, modify the CTEs accordingly. Do you see anything as not expected?\n\n"
+                        observation_exec = self.controller.execute_sf_exec_sql_query(action)
 
                         if "Error" in observation_exec or observation_exec == "" or "No data found" in observation_exec:
                             observation += "Error occurred while fetching data: " + observation_exec
+                            # observation = EXEC_SQL_SEMI_STRUCTURED + observation
+                            # observation += represent_registered_info()
                             observation += "\n\nThe SQL is erroneous. Check again."
                             observation += "\n\nTask is: " + self.instruction + "\n\n"
+                            observation += "\n\nTake help from the TIPs to handle semi-structured data\n\n"
 
                         else:
                             if len(observation_exec) > 1000:
                                 lines = observation_exec.split("\n")
                                 observation_exec = "Printing just the first line since output is very big:\n" + "\n".join(lines[:2])
                             observation += "Output of the SQL execution:\n\n```\n" + observation_exec + "\n```\n\n"
+                            # observation += represent_registered_info()
+                            # observation += "\n\nCarefully go through the initial instruction and the prediction. Analyze if results satisfy the instruction.\n\nTask:\n" + self.instruction + "\n\nPrediction:\n" + self.predicted_obs + "\n\nFirst, break down the question noting every detail about the question. Then, verify every detail is satisfied. Are you sure about the number of rows? Isn't the question asking something else? Are you surethe conditional clauses are correct and in right place?\n\n"
                             observation += "\n\nCarefully go through the initial instruction. Analyze if results satisfy the instruction.\n\nTask:\n" + self.instruction + "\n\nFirst, break down the question noting every detail about the question. Then, verify every detail is satisfied.\n\n"
                             observation += "\n\nThe results must satisfy" + self.predicted_obs + "\n\n"
                             observation += "\n\nMake sure there are no repetitions among rows, there are no null values in columns\n\n"
                             observation += "\n\nMake sure the formats are as expected as per the column name.\n\n"
                             observation += "If output is not as expected, try to understand why and try a different query. If the output is fully correct and as expected, only then terminate.\n\n"
-
-                        # refresh = "Go back to System Message"
-                    # observation += self.represent_registered_info()
 
                 elif isinstance(action, Terminate):
                     observation = action.output

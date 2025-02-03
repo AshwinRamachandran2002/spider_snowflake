@@ -1,52 +1,26 @@
 # Spider-Agent-Snow
 
-An Agent Method Baseline for Spider 2.0-Snow based on Docker environment.
-
-## 🚀 Quickstart
-
-#### Run Spider-Agent(Snow)
-
-1. **Install Docker**. Follow the instructions in the [Docker setup guide](https://docs.docker.com/engine/install/) to install Docker on your machine. 
-2. **Install conda environment**.
+GUI for better IDE
+Run 
 ```
-git clone https://github.com/xlang-ai/Spider2.git
-cd methods/spider-agent-snow
-
-# Optional: Create a Conda environment for Spider 2.0
-# conda create -n spider2 python=3.11
-# conda activate spider2
-
-# Install required dependencies
-pip install -r requirements.txt
+python gui.py
 ```
-3. **Configure credential**: Follow this [guideline](https://github.com/xlang-ai/Spider2/blob/main/assets/Snowflake_Guideline.md) to get your own Snowflake username and password in our snowflake database. You must update `snowflake_credential.json`.
+The GUI is used for complex SQL queries that can be easily solved through multiple Common Table Expressions (CTEs) conjoined.
 
-4. **Spider 2.0-Snow Setup**
-```
-python spider_agent_setup_snow.py
-```
+Each CTE is accompanied by what the Agent think the CTE means and does. The developer can easily identify any flaws in the reasoning and edit the natrual language text explanation to refine the SQL or edit the main SQL itself.
 
-5. **Run agent**
-```
-export OPENAI_API_KEY=your_openai_api_ke```
-
-                                                                                                                                
+The dashboard also presents the output of execution of the CTE, to monitor the intermediate results.
+# Images of dashboard
 
 
-### Evaluation
+## Dashboard open with chosen Schema and Question highlight the columns information
+![Screenshot from 2025-02-02 22-25-56](https://github.com/user-attachments/assets/3799a520-5217-470b-8e45-c75045d09a12)
 
-#### Extract Results
-
-Reorganize run results into a standard submission format, here we store the answer directly into the evaluation suite
-
-```python
-python get_spider2snow_submission_data.py --experiment_suffix <The name of this experiment> --results_folder_name <Standard Submission Folders>
-python get_spider2snow_submission_data.py --experiment_suffix gpt-4o-test1 --results_folder_name ../../spider2/evaluation_suite/gpt-4o-test1
-```
-
-#### Run Evaluation Scripts
-
-You can run `evaluate.py` in the [evaluation suite](https://github.com/xlang-ai/Spider2/tree/main/spider2/evaluation_suite) folder of `Spider 2.0` to get the evaluation results.
+## Dashboard open with different CTEs and its execution output
+![Screenshot from 2025-02-02 22-25-39](https://github.com/user-attachments/assets/7fdae90d-773b-4105-8fe5-a80d1cdac246)
 
 
+![Screenshot from 2025-02-02 22-25-26](https://github.com/user-attachments/assets/3d69db73-e827-456d-91c9-a3df9ceeef6e)
 
+
+![Screenshot from 2025-02-02 22-25-16](https://github.com/user-attachments/assets/50b05ecc-3c8d-438c-985d-0e86da0aa0cd)

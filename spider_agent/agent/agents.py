@@ -9,7 +9,7 @@ from http import HTTPStatus
 from io import BytesIO
 from typing import Dict, List
 from spider_agent.agent.prompts import BIGQUERY_SYSTEM, LOCAL_SYSTEM, DBT_SYSTEM, SNOWFLAKE_SYSTEM, REFERENCE_PLAN_SYSTEM, SNOWFLAKE_SYSTEM_CONSISTENCY
-from spider_agent.agent.action import Action, Terminate, SNOWFLAKE_EXEC_SQL, SNOWFLAKE_Yes_NO, SNOWFLAKE_MODIFY_CTE, SNOWFLAKE_REGISTER_CTE, SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON, SNOWFLAKE_READ_SCHEMA_FROM_DDL, SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE, SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE, SNOWFLAKE_JUSTIFY_DDL_RELEVANCE,SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE, SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE, PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS, SNOWFLAKE_CHECK_IF_CONDITIONAL_CLAUSES_WORK, SNOWFLAKE_FIND_DISTINCT_VALUES_IN_THE_COLUMN
+from spider_agent.agent.action import Action, Terminate, SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES, SNOWFLAKE_EXEC_SQL, SNOWFLAKE_Yes_NO, SNOWFLAKE_MODIFY_CTE, SNOWFLAKE_REGISTER_CTE, SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON, SNOWFLAKE_READ_SCHEMA_FROM_DDL, SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE, SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE, SNOWFLAKE_JUSTIFY_DDL_RELEVANCE,SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE, SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE, PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS, SNOWFLAKE_CHECK_IF_CONDITIONAL_CLAUSES_WORK, SNOWFLAKE_FIND_DISTINCT_VALUES_IN_THE_COLUMN
 from spider_agent.envs.spider_agent import Spider_Agent_Env
 from spider_agent.agent.models import call_llm
 
@@ -69,12 +69,9 @@ class PromptAgent:
         # if 'plan' in self.env.task_config:
         #     self.reference_plan = self.env.task_config['plan']
 
-        self._AVAILABLE_ACTION_CLASSES = [Terminate, SNOWFLAKE_EXEC_SQL, SNOWFLAKE_Yes_NO, SNOWFLAKE_MODIFY_CTE, SNOWFLAKE_REGISTER_CTE, SNOWFLAKE_CHECK_IF_CONDITIONAL_CLAUSES_WORK, SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON, SNOWFLAKE_READ_SCHEMA_FROM_DDL, PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS,SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE, SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE, SNOWFLAKE_FIND_DISTINCT_VALUES_IN_THE_COLUMN, SNOWFLAKE_JUSTIFY_DDL_RELEVANCE, SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE, SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE]
+        self._AVAILABLE_ACTION_CLASSES = [Terminate, SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES, SNOWFLAKE_EXEC_SQL, SNOWFLAKE_Yes_NO, SNOWFLAKE_MODIFY_CTE, SNOWFLAKE_REGISTER_CTE, SNOWFLAKE_CHECK_IF_CONDITIONAL_CLAUSES_WORK, SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON, SNOWFLAKE_READ_SCHEMA_FROM_DDL, PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS,SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE, SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE, SNOWFLAKE_FIND_DISTINCT_VALUES_IN_THE_COLUMN, SNOWFLAKE_JUSTIFY_DDL_RELEVANCE, SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE, SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE]
         action_space = "".join([action_cls.get_action_description() for action_cls in self._AVAILABLE_ACTION_CLASSES])
-        if self.consistency:
-            self.system_message = SNOWFLAKE_SYSTEM_CONSISTENCY.format(work_dir=self.work_dir, action_space=action_space, task=self.instruction, max_steps=self.max_steps)
-        else:
-            self.system_message = SNOWFLAKE_SYSTEM.format(work_dir=self.work_dir, action_space=action_space, task=self.instruction, max_steps=self.max_steps)
+        self.system_message = SNOWFLAKE_SYSTEM_CONSISTENCY.format(work_dir=self.work_dir, action_space=action_space, task=self.instruction, max_steps=self.max_steps)
 
         
         self.history_messages.append({
@@ -210,12 +207,9 @@ class PromptAgent:
         step_idx = 0
         self.model = "gpt-4o"
 
-        if self.consistency:    
-            obs = "You are in the folder now. Following is the directory tree structure:\n\n" + self.env.get_directory_tree() + "\n\n. Start by predicting a very very minimal set of column names and example rows that should be present in the final .csv file.\n"
-            obs += "\nFunction Signature: \n" + PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS.get_action_description() + "\n"
-            obs += "\n\nThe task is: " + self.instruction + "\n"
-        else:
-            obs = "You are in the folder now."
+        obs = "You are in the folder now. Following is the directory tree structure:\n\n" + self.env.get_directory_tree() + "\n\n. Start by predicting a very very minimal set of column names and example rows that should be present in the final .csv file.\n"
+        obs += "\nFunction Signature: \n" + PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS.get_action_description() + "\n"
+        obs += "\n\nThe task is: " + self.instruction + "\n"
 
         retry_count = 0
         loaded_ok = 0
@@ -223,8 +217,8 @@ class PromptAgent:
             
             # if obs and self.history_messages are saved for resuming the conversation then load them here
             import pickle
-            if loaded_ok == 0 and os.path.exists(f"data_dump/{self.instruction_id}.pkl"):
-                with open(f"data_dump/{self.instruction_id}.pkl", "rb") as f:
+            if loaded_ok == 0 and os.path.exists(f"data_dump2/{self.instruction_id}.pkl"):
+                with open(f"data_dump2/{self.instruction_id}.pkl", "rb") as f:
                     loaded = pickle.load(f)
                     loaded_ok = 1
                     obs = loaded["obs"]
@@ -233,13 +227,12 @@ class PromptAgent:
                     self.env.md_files_content = loaded["md_files_content"]
                     self.env.instruction = loaded["instruction"]
                     self.env.predicted_obs = loaded["predicted_obs"]
-                    obs = self.env.exec_sql_prompt()
-                    obs += "\nTry to break down SQL into as many small and complete CTEs for better error handling\n\n"
-                    obs += "\nWhen each CTE is viewed individually, it must make complete sense to the observor. They are not just intermediaries"
+                    # self.env.instruction = """"""                    
+                    obs = self.env.relevance_table_before_exec()
                     # self.model = "o1"
                     
 
-            input("Press Enter to continue...")
+            # input("Press Enter to continue...")
             _, action = self.predict(
                 obs,
             )
@@ -253,15 +246,19 @@ class PromptAgent:
             else:
                 logger.info("Step %d: %s", step_idx + 1, action)
                 obs, done, refresh = self.env.step(action)
-                if refresh == "Go back to JSON justification":
+                if refresh == "Change to o1":
+                    self.model = "gpt-4o"
+                elif refresh == "Change to gpt-4o":
+                    self.model = "gpt-4o"
+                elif refresh == "Go back to JSON justification":
                     self.history_messages = self.history_messages[:-2]
                 elif refresh == "Go back to System Message(DUMP)":
                     self.history_messages = [self.history_messages[0]]
-                    if os.path.exists(f"data_dump/{self.instruction_id}.pkl"):
-                        os.remove(f"data_dump/{self.instruction_id}.pkl")
-                    if not os.path.exists("data_dump"):
-                        os.makedirs("data_dump")
-                    with open(f"data_dump/{self.instruction_id}.pkl", "wb") as f:
+                    if os.path.exists(f"data_dump2/{self.instruction_id}.pkl"):
+                        os.remove(f"data_dump2/{self.instruction_id}.pkl")
+                    if not os.path.exists("data_dump2"):
+                        os.makedirs("data_dump2")
+                    with open(f"data_dump2/{self.instruction_id}.pkl", "wb") as f:
                         pickle.dump({"obs": obs, "history_messages": self.history_messages, "registered_json": self.env.registered_json, "md_files_content": self.env.md_files_content, "instruction": self.env.instruction, "predicted_obs": self.env.predicted_obs}, f)
                 elif refresh == "Go back to System Message":
                     self.history_messages = [self.history_messages[0]]
@@ -271,8 +268,16 @@ class PromptAgent:
                     obs = "You are in the folder now."
 
             if done:
+                if os.path.exists(f"sql_dump2/{self.instruction_id}.pkl"):
+                    os.remove(f"sql_dump2/{self.instruction_id}.pkl")
+                if not os.path.exists("sql_dump2"):
+                    os.makedirs("sql_dump2")
+                with open(f"sql_dump2/{self.instruction_id}.pkl", "wb") as f:
+                    pickle.dump({"indi_sqls": self.env.indi_sqls, "tables": self.env.tables, "last_major_sql": self.env.last_major_sql,
+                                    "final_exec": self.env.final_exec, "indi_sqls_exec": self.env.indi_sqls_exec}, f)
                 if isinstance(action, Terminate):
                     result = action.output
+
                 elif isinstance(action, SNOWFLAKE_EXEC_SQL):
                     result = action.save_path
                 logger.info("The task is done.")

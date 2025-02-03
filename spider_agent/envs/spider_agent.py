@@ -15,7 +15,7 @@ from spider_agent.controllers.python import PythonController
 from spider_agent.controllers.setup import SetupController
 from spider_agent.envs.utils import *
 from spider_agent import configs
-from spider_agent.agent.action import Action, Terminate, SNOWFLAKE_EXEC_SQL, SNOWFLAKE_Yes_NO, SNOWFLAKE_REGISTER_CTE, SNOWFLAKE_MODIFY_CTE, SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON, SNOWFLAKE_READ_SCHEMA_FROM_DDL, SNOWFLAKE_JUSTIFY_DDL_RELEVANCE, SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE, SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE, SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE,SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE, PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS, SNOWFLAKE_CHECK_IF_CONDITIONAL_CLAUSES_WORK, SNOWFLAKE_FIND_DISTINCT_VALUES_IN_THE_COLUMN
+from spider_agent.agent.action import Action, SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES, Terminate, SNOWFLAKE_EXEC_SQL, SNOWFLAKE_Yes_NO, SNOWFLAKE_REGISTER_CTE, SNOWFLAKE_MODIFY_CTE, SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON, SNOWFLAKE_READ_SCHEMA_FROM_DDL, SNOWFLAKE_JUSTIFY_DDL_RELEVANCE, SNOWFLAKE_JUSTIFY_RELEVANT_JSON_FILE_RELEVANCE, SNOWFLAKE_JUSTIFY_JSON_FILE_RELEVANCE, SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE,SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE, PREDICTED_MINIMAL_SET_OF_COLUMN_NAMES_AND_EXAMPLE_ROWS, SNOWFLAKE_CHECK_IF_CONDITIONAL_CLAUSES_WORK, SNOWFLAKE_FIND_DISTINCT_VALUES_IN_THE_COLUMN
 from spider_agent.agent.prompts import EXEC_SQL_SEMI_STRUCTURED
 import signal
 
@@ -237,6 +237,8 @@ class Spider_Agent_Env(gym.Env):
         
         self.curr_error = -1
         
+        self.already_done = False
+        
         return tree_structure
 
 
@@ -295,15 +297,30 @@ class Spider_Agent_Env(gym.Env):
             observation = "\nNow, you can generate the SQL query using SNOWFLAKE_EXEC_SQL\n\n"
             observation += "\nFunction Signature: \n" + SNOWFLAKE_EXEC_SQL.get_action_description() + "\n"
             observation += "\nYou can terminate using: \n" + Terminate.get_action_description() + "\n"
-            observation += self.represent_registered_info()
-            observation = EXEC_SQL_SEMI_STRUCTURED + observation
-            observation = "\n\nExternal Information:\n" + observation + "\n\n" + self.md_files_content
-            observation += "\n\nRemember that the sample values present above are chosen at random and not exhaustive."
+            # observation += self.represent_registered_info()
+            # observation = EXEC_SQL_SEMI_STRUCTURED + observation
+            # observation = "\n\nExternal Information:\n" + observation + "\n\n" + self.md_files_content
+            # observation += "\n\nRemember that the sample values present above are chosen at random and not exhaustive."
+            observation += "\nTry to break down SQL into as many small and complete CTEs for better error handling\n\n"
+            observation += "\nWhen each CTE is viewed individually, it must make complete sense to the observor. They are not just intermediaries"
+
         observation += "\n\nTask is: " + self.instruction + "\n\n"
         # observation += "\n\nBefore writing the SQL, justify for each CTE you are going to write, the relevance of each column using function signature: \n" + SNOWFLAKE_REGISTER_RELEVANCE_OF_RELEVANT_COLUMNS_FOR_CTE.get_action_description() + "\n"
         if sql:
             observation += "LLM predicted SQL Query:\n" + sql + "\n\n"
         return observation
+
+    def relevance_table_before_exec(self):
+        observation = "\nNow, justify relevance or irrelevance of each table provided for the SQL query\n\n"
+        observation += "\nFunction Signature: \n" + SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES.get_action_description() + "\n"
+        observation += self.represent_registered_info()
+        observation = EXEC_SQL_SEMI_STRUCTURED + observation
+        observation = "\n\nExternal Information:\n" + observation + "\n\n" + self.md_files_content
+        observation += "\n\nRemember that the sample values present above are chosen at random and not exhaustive."
+
+        observation += "\n\nTask is: " + self.instruction + "\n\n"
+        return observation
+
 
     def step(self, action: Action):
         try:
@@ -381,6 +398,7 @@ class Spider_Agent_Env(gym.Env):
 
                 def get_cte_obs_prompt(sql, cte):
                     observation_exec = self.controller.execute_sf_exec_sql_query_random(sql)
+                    self.indi_sqls_exec[self.cte_obs] = observation_exec
                     
                     major_error = False
                     if "No data found" in observation_exec:
@@ -397,7 +415,7 @@ class Spider_Agent_Env(gym.Env):
                         observation += "\n\nFirst see if you are accessing the columns correctly. Look at their data types."
                         observation += "\n\nTake help from the TIPs to handle semi-structured data\n\n"
                         observation += "\n\nEnter the moodified CTE using:" + SNOWFLAKE_MODIFY_CTE.get_action_description() + "\n"
-                        observation += "\n\nYou are not allowed to modify any other CTE."
+                        # observation += "\n\nYou are not allowed to modify any other CTE."
                         return observation
                 
 
@@ -421,7 +439,7 @@ class Spider_Agent_Env(gym.Env):
                     observation += "\n\nCheck carefully if the output is as expected. If not, modify the CTE accordingly. "
                     observation += "\n\nLook at unexpected repetitions in rows, null values in columns, and formats of the columns."
                     observation += "\n\nLook at null values in columns. If you suspect mistakes, look back at the columns and tables given and try other olumns you may have missed."
-                    observation += "\n\nAny modifications must be made to this CTE not any other."
+                    # observation += "\n\nAny modifications must be made to this CTE not any other."
                     observation += "\n\nTask is: " + self.instruction
                     observation += "\n\nIf the output is correct, register the CTE using: " + SNOWFLAKE_REGISTER_CTE.get_action_description()
                     observation += "\n\nIf the output is not correct, modify the CTE using: " + SNOWFLAKE_MODIFY_CTE.get_action_description()
@@ -533,46 +551,85 @@ class Spider_Agent_Env(gym.Env):
                         observation = self.exec_sql_prompt()
                         refresh = "Go back to System Message(DUMP)"
 
+                elif isinstance(action, SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES):
+                    observation = self.exec_sql_prompt()
+                    observation += "\nTry to break down SQL into as many small and complete CTEs for better error handling\n\n"
+                    observation += "\nWhen each CTE is viewed individually, it must make complete sense to the observor. They are not just intermediaries"
+                    observation += "\nPlease use all the tables above that were deemed to be relevant for the reasons presented"
+                    db = None
+                    for table in self.registered_json:
+                        db = table.split(".")[0]
+                    
+                    if db == "BANK_SALES_TRADING":
+                        observation += "\nRemember that monthly balance does not mean just overing transactions for the month. It needs to also accumulate the account balance from all the previous months."
+                    refresh = "Change to o1" 
+                    self.already_done = False
 
                 elif isinstance(action, SNOWFLAKE_EXEC_SQL):
-                    self.indi_sqls = []
-                    self.tables = []
-                    past_sql = ""
-                    curr_sql = ""
-                    curr_table = ""
-                    self.last_major_sql = ""
-                    for j, line in enumerate(action.sql_query.split("\n")):
-                        line = line
-                        if line.lower().startswith("select"):
-                            for k in range(j, len(action.sql_query.split("\n"))):
-                                self.last_major_sql += action.sql_query.split("\n")[k] + "\n"
-                            break
-                        elif "as (" in line.lower():
-                            curr_sql += line + "\n"
-                            if line.lower().startswith("with"):
-                                curr_table = line.split(" ")[1]
+                    if self.already_done:
+                        done = True
+                        observation = ""
+                    else:
+                        self.already_done = True
+                        self.indi_sqls = []
+                        self.indi_sqls_exec = []
+                        self.tables = []
+                        past_sql = ""
+                        curr_sql = ""
+                        curr_table = ""
+                        self.last_major_sql = ""
+                        self.final_exec = ""
+                        for j, line in enumerate(action.sql_query.split("\n")):
+                            line = line
+                            if line.lower().startswith("select"):
+                                for k in range(j, len(action.sql_query.split("\n"))):
+                                    self.last_major_sql += action.sql_query.split("\n")[k] + "\n"
+                                break
+                            elif "as (" in line.lower():
+                                curr_sql += line + "\n"
+                                if line.lower().startswith("with"):
+                                    curr_table = line.split(" ")[1]
+                                else:
+                                    curr_table = line.split(" ")[0]
+                            elif line.lower().startswith(")"):
+                                temp_sql = curr_sql + ")"
+                                if past_sql:
+                                    self.indi_sqls.append(temp_sql.replace(past_sql + ",\n", "")) 
+                                else:
+                                    self.indi_sqls.append(temp_sql) 
+                                    
+                                past_sql = temp_sql
+                                self.tables.append(curr_table)
+                                curr_sql += line + "\n"
                             else:
-                                curr_table = line.split(" ")[0]
-                        elif line.lower().startswith(")"):
-                            temp_sql = curr_sql + ")"
-                            if past_sql:
-                                self.indi_sqls.append(temp_sql.replace(past_sql + ",\n", "")) 
-                            else:
-                                self.indi_sqls.append(temp_sql) 
-                                
-                            past_sql = temp_sql
-                            self.tables.append(curr_table)
-                            curr_sql += line + "\n"
-                        else:
-                            curr_sql += line + "\n"
+                                curr_sql += line + "\n"
 
-                    self.cte_obs = 0
-                    # for i in range(len(self.indi_sqls)):
-                    #     print("CTE", i, ":", self.indi_sqls[i])
-                    #     print("Table", i, ":", self.tables[i])
-                    # input("Press Enter to continue")
-                    partial_sql = self.indi_sqls[0] + "\n" + "select * from " + self.tables[0] + " limit 20;"
-                    observation = get_cte_obs_prompt(partial_sql, self.indi_sqls[0])
+                        self.cte_obs = 0
+                        self.indi_sqls_exec = ["" for i in range(len(self.indi_sqls))]
+                        partial_sql = self.indi_sqls[0] + "\n" + "select * from " + self.tables[0] + " limit 20;"
+                        observation = get_cte_obs_prompt(partial_sql, self.indi_sqls[0])
+                        refresh = "Change to gpt-4o"
+                        # full_sql = ",\n".join(self.indi_sqls) + "\n" + self.last_major_sql
+                        # observation = self.exec_sql_prompt(full_sql, partial=True) + "\n\n"
+                        # observation_exec = self.controller.execute_sf_exec_sql_query_random(full_sql)
+                        # self.final_exec = observation_exec
+
+                        # if "Error" in observation_exec or observation_exec == "" or "No data found" in observation_exec:
+                        #     observation += "Error occurred while fetching data: " + observation_exec
+                        #     observation += "\n\nThe SQL is erroneous. Check again."
+                        #     observation += "\n\nTask is: " + self.instruction + "\n\n"
+
+                        # else:
+                        #     if len(observation_exec) > 1000:
+                        #         lines = observation_exec.split("\n")
+                        #         observation_exec = "Printing just the first line since output is very big:\n" + "\n".join(lines[:2])
+                        #     observation += "Output of the SQL execution:\n\n```\n" + observation_exec + "\n```\n\n"
+                        #     observation += "\n\nCarefully go through the initial instruction. Analyze if results satisfy the instruction.\n\nTask:\n" + self.instruction + "\n\nFirst, break down the question noting every detail about the question. Then, verify every detail is satisfied.\n\n"
+                        #     observation += "\n\nThe results must satisfy" + self.predicted_obs + "\n\n"
+                        #     observation += "\n\nMake sure there are no repetitions among rows, there are no null values in columns\n\n"
+                        #     observation += "\n\nMake sure the formats are as expected as per the column name.\n\n"
+                        #     observation += "If output is not as expected, try to understand why and try a different query. If the output is fully correct and as expected, only then terminate.\n\n"
+
 
                 elif isinstance(action, SNOWFLAKE_MODIFY_CTE):
                     cte_name = action.cte_name
@@ -580,11 +637,15 @@ class Spider_Agent_Env(gym.Env):
                         if self.tables[i] == cte_name:
                             self.cte_obs = i
                             break
+                    if self.cte_obs == 0 and not action.sql_query.lower().startswith("with"):
+                        action.sql_query = "with " + action.sql_query
                     self.indi_sqls[self.cte_obs] = action.sql_query
                     partial_sql = ",\n".join(self.indi_sqls[:self.cte_obs+1]) + "\n" + "select * from " + self.tables[self.cte_obs] + " limit 20;"
                     observation = get_cte_obs_prompt(partial_sql, self.indi_sqls[self.cte_obs])
 
                 elif isinstance(action, SNOWFLAKE_REGISTER_CTE):
+                    if self.cte_obs == 0 and not action.sql_query.lower().startswith("with"):
+                        action.sql_query = "with " + action.sql_query
                     self.indi_sqls[self.cte_obs] = action.sql_query
                     self.cte_obs += 1
                     full_sql = ",\n".join(self.indi_sqls) + "\n" + self.last_major_sql
@@ -595,6 +656,7 @@ class Spider_Agent_Env(gym.Env):
                     elif self.cte_obs == len(self.indi_sqls):
                         observation = self.exec_sql_prompt(full_sql, partial=True) + "\n\n"
                         observation_exec = self.controller.execute_sf_exec_sql_query_random(full_sql)
+                        self.final_exec = observation_exec
 
                         if "Error" in observation_exec or observation_exec == "" or "No data found" in observation_exec:
                             observation += "Error occurred while fetching data: " + observation_exec

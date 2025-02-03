@@ -329,7 +329,46 @@ class SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON(Action):
     def __repr__(self) -> str:
         return f'SNOWFLAKE_READ_TABLE_SCHEMA_FROM_JSON(json_file_path="{self.json_file_path}")'
 
+@dataclass
+class SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES(Action):
+    action_type: str = field(default="justify_json_file", init=False, repr=False, metadata={"help": 'type of action, c.f., "exec_sf_sql"'})
+    table_reason: list[str] = field(metadata={"help": 'dictionary containing the reason for the relevance of each table'})
 
+    @classmethod
+    def get_action_description(cls) -> str:
+        return """
+## SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES Action
+* Signature: SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES(table_reason=[{"table_name": "database_name.schema_name.table_name", "desciption": "What is purpose of table in the database", "relevance_reason': "Reason for the relevance of the JSON file", "is_relevant": "True/False"}])
+* Description: Justifies the relevance of the Tables based on the provided reasons and provides descriptions for each table.
+* Examples:
+  - Example1: SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES(table_reason=[{"table_name": "HOUSEHOLD.HOUSE_GROUP.HOUSE", "desciption": "This table contains information about the houses in the household", "relevance_reason": "HOUSE has information about doors as asked in the question.", "is_relevant": "True"}, {"table_name": "HOUSEHOLD.HOUSE_GROUP.COLLECTION", "desciption": "This table contains information about the collection in the household", "relevance_reason": "COLLECTION may contain information about the collection as asked in the question.", "is_relevant": "True"}])
+"""
+    @classmethod
+    def parse_action_from_text(cls, text: str) -> Optional['SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES']:
+        main_pattern = r'''
+            SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES\(
+                (.+)
+                \)
+        '''
+        match = re.search(main_pattern, text, flags=re.DOTALL | re.VERBOSE)
+        if not match:
+            return None
+        if '"' not in text:
+            text = text.replace("'", '"')
+        table_name = re.findall(r'"table_name":\s*"([^"]+?)"', text)
+        desciption = re.findall(r'"desciption":\s*"([^"]+?)"', text)
+        relevance_reason = re.findall(r'"relevance_reason":\s*"([^"]+?)"', text)
+        is_relevant = re.findall(r'"is_relevant":\s*(.+?)\s*\}', text)
+        
+        clause_tuple = []
+        for i in range(len(table_name)):
+            if "true" in is_relevant[i].lower():
+                clause_tuple.append({"table_name": table_name[i], "desciption": desciption[i], "relevance_reason": relevance_reason[i], "is_relevant": True})
+        return cls(table_reason=clause_tuple)
+
+    def __repr__(self) -> str:
+        table_reason_str = ', '.join([f'{{"table_name": "{col["table_name"]}", "desciption": "{col["desciption"]}", "relevance_reason": "{col["relevance_reason"]}", "is_relevant": "{col["is_relevant"]}"}}' for col in self.table_reason])
+        return f'SNOWFLAKE_REGISTER_RELEVANCE_OF_TABLES(table_reason={table_reason_str})'
 
 @dataclass
 class SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE(Action):
@@ -365,19 +404,19 @@ class SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE(Action):
         reasons = re.findall(r'"relevance_reason":\s*"([^"]+?)"', text)
         is_relevant = re.findall(r'"is_relevant":\s*(.+?)\s*\}', text)
 
-        if len(is_relevant) != len(column_names) or len(reasons) != len(is_relevant):
-            print(text)
-            exit(0)
+        # if len(is_relevant) != len(column_names):
+            # exit(0)
         column_justify = []
         for i in range(len(column_names)):
             if "true" in is_relevant[i].lower():            
-                column_justify.append({"column_name": column_names[i], "reason": reasons[i]})
+                column_justify.append({"column_name": column_names[i], "reason": ""})
 
         return cls(table_name=table_names[0], column_justify=column_justify)
 
     def __repr__(self) -> str:
-        table_column_justify_str = ', '.join([f'{{"column_name": "{col["column_name"]}", "relevance_reason": "{col["reason"]}"}}' for col in self.column_justify])
+        table_column_justify_str = ', '.join([f'{{"column_name": "{col["column_name"]}"}}' for col in self.column_justify])
         return f'SNOWFLAKE_REGISTER_RELEVANCE_OF_ALL_COLUMNS_FOR_TABLE(table_name="{self.table_name}", column_justify=[{table_column_justify_str}])'
+
 
 
 @dataclass
@@ -615,10 +654,10 @@ class SNOWFLAKE_MODIFY_CTE(Action):
     def get_action_description(cls) -> str:
         return """
 ## SNOWFLAKE_MODIFY_CTE Action
-* Signature: SNOWFLAKE_MODIFY_CTE(sql_query="WITH CTE1 AS ( SELECT your_column_1, your_column_2 FROM your_table_1 )", cte_name="CTE1", reason="reason for modifying the CTE")
+* Signature: SNOWFLAKE_MODIFY_CTE(sql_query="CTE1 AS (\nSELECT your_column_1, your_column_2\nFROM your_table_1\n)", cte_name="CTE1", reason="reason for modifying the CTE")
 * Description: Executes a SQL query on Snowflake. Please follow the syntax of action very very strictly. The sql query must follow the same format of the CTE it is modifying.
 * Examples:
-  - Example1: SNOWFLAKE_MODIFY_CTE(sql_query="CTE1 AS (SELECT count(*) FROM DOMES.GROUP.SALES)", cte_name="CTE1", reason="CTE had error before")
+  - Example1: SNOWFLAKE_MODIFY_CTE(sql_query="CTE1 AS (\nSELECT count(*)\nFROM DOMES.GROUP.SALES\n)", cte_name="CTE1", reason="CTE had error before")
 """
     @classmethod
     def parse_action_from_text(cls, text: str) -> Optional['SNOWFLAKE_MODIFY_CTE']:
@@ -702,11 +741,11 @@ class SNOWFLAKE_REGISTER_CTE(Action):
     def get_action_description(cls) -> str:
         return """
 ## SNOWFLAKE_REGISTER_CTE Action
-* Signature: SNOWFLAKE_REGISTER_CTE(sql_query="(WITH/"") CTE1 AS (SELECT your_column_1, your_column_2 FROM your_table_1)", reason="reason for registering the CTE")
+* Signature: SNOWFLAKE_REGISTER_CTE(sql_query="CTE1 AS (\nSELECT your_column_1, your_column_2\nFROM your_table_1\n)", reason="reason for registering the CTE")
 * Description: Executes a SQL query on Snowflake. Please follow the syntax of action very very strictly. The sql query must follow the same format of the CTE it is registering.
 Add WITH only if the given CTE has it. 
 * Examples:
-  - Example1: SNOWFLAKE_REGISTER_CTE(sql_query="CTE1 AS (SELECT count(*) FROM DOMES.GROUP.SALES)", reason="CTE is required to filter the sales data")
+  - Example1: SNOWFLAKE_REGISTER_CTE(sql_query="CTE1 AS (\nSELECT count(*)\nFROM DOMES.GROUP.SALES\n)", reason="CTE is required to filter the sales data")
 """
     @classmethod
     def parse_action_from_text(cls, text: str) -> Optional['SNOWFLAKE_REGISTER_CTE']:

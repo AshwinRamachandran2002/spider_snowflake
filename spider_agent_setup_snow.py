@@ -4,9 +4,9 @@ import shutil
 import zipfile
 import argparse
 
-JSONL_PATH = '../../spider2-snow/spider2-snow.jsonl'
-DATABASE_PATH = '../../spider2-snow/resource/databases/'
-DOCUMENT_PATH = '../../spider2-snow/resource/documents'
+JSONL_PATH = '../../../Spider2-new/spider2-snow/spider2-snow.jsonl'
+DATABASE_PATH = '../../../Spider2-new/spider2-snow/resource/databases/'
+DOCUMENT_PATH = '../../../Spider2-new/spider2-snow/resource/documents'
 
 
 def clear_folder(folder_path):

@@ -31,7 +31,7 @@ def call_llm(payload):
         logger.info("Generating content with GPT model: %s", model)
         
 
-        for i in range(3):
+        for i in range(1):
             try:
                 response = requests.post(
                             "https://api.openai.com/v1/chat/completions",
@@ -88,7 +88,7 @@ def call_llm(payload):
         del payload["temperature"]
         del payload["top_p"]
 
-        for i in range(3):
+        for i in range(1):
             try:
                 response = requests.post(
                             "https://api.openai.com/v1/chat/completions",
@@ -100,8 +100,8 @@ def call_llm(payload):
                 return True, output_message
             except Exception as e:
                 logger.error("Failed to call LLM: " + str(e))
-                logger.error("Retrying ...")
-                time.sleep(10 * (2 ** (i + 1)))
+                # logger.error("Retrying ...")
+                # time.sleep(10 * (2 ** (i + 1)))
         return False, code_value
 
     elif model.startswith("azure"):
